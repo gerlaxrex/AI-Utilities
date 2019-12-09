@@ -6,6 +6,7 @@
 std::vector<int> fifo;
 
 
+//Function to print the path through the nodes of the graph
 void printPath(int* path, int i, int init){
     if(init == i){
         std::cout << init << " ";
@@ -15,46 +16,45 @@ void printPath(int* path, int i, int init){
     }
 }
 
+//Function to compute costs
 int computeCost(int*path,int**graph,int i,int init,int cost){
     if(init == i){
         return cost;
     }else{
-        computeCost(path,graph,path[i],init,cost+graph[path[i]][i]);
+        int prevNode = path[i];
+        computeCost(path,graph,prevNode,init,cost + graph[prevNode][i]);
     }
 }
 
-int breadthfirst(int in, int*path, int**graph, int goal, int cost){
-    if(in == goal) return cost;
+// Function for the Breadth First Algorithm
+int breadthfirst(int in, int*path, int**graph, int goal){
+    if(in == goal) return 1; //Goal checking
     for(int i = 0; i != N; ++i){
         if(graph[in][i] > 0 && path[i] >= INF){
-            if(i != goal){
                 fifo.push_back(i);
                 path[i] = in;
-            }else{
-                path[i] = in;
-                return computeCost(path,graph,goal,in,0);
             }
-        }
     }
     int next = *(fifo.begin());
     fifo.erase(fifo.begin());
-    breadthfirst(next,path,graph,goal,cost+graph[in][next]);
+    breadthfirst(next,path,graph,goal);
 }
 
-int depthfirst(int in, int* path,int** graph, int goal, int cost){
+//Function for the Depth First Algorithm
+int depthfirst(int in, int* path,int** graph, int goal){
     if(in == goal){
-        std::cout << cost << std::endl;
-        return cost;
+        return 1;
     }else{
         for(int i = 0; i != N;++i){
             if(graph[in][i] > 0 && path[i] >= INF){
                 path[i] = in;
-                depthfirst(i,path,graph,goal,cost+graph[in][i]);
+                depthfirst(i,path,graph,goal);
             }
         }
     }
 }
 
+//Main in order to test the
 int main(){
     int* path = new int[N]; 
     for(int i = 0; i != N; ++i){path[i] = INF;}
@@ -63,7 +63,7 @@ int main(){
         graph[i] = new int[N];
     }
     path[0] = 0;
-    int cost = 0;
+    
     graph[0][1] = 1;
     graph[0][4] = 3;
     graph[0][5] = 3;
@@ -82,14 +82,18 @@ int main(){
     graph[9][4] = 2;
     graph[9][8] = 1;
 
-    cost = depthfirst(0,path,graph,9,0);
+    depthfirst(0,path,graph,9);
     printPath(path,9,0);
-    
+    int c = computeCost(path,graph,9,0,0);
+    std::cout <<"DF: " << c << std::endl;
+
+
     for(int i = 0; i != N; ++i){path[i] = INF;}
     path[0] = 0;
     
-    cost = breadthfirst(0,path,graph,9,cost);
-    std::cout << cost << std::endl;
+    breadthfirst(0,path,graph,9);
+    c = computeCost(path,graph,9,0,0);
+    std::cout <<"BF: "<< c << std::endl;
     printPath(path,9,0);
     return 0;
 }
