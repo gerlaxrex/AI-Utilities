@@ -7,31 +7,25 @@
 #include<cmath>
 #include<fstream>
 #include<set>
+#include<stdexcept>
 
 typedef std::pair<double,int> P;
 typedef std::pair<double,std::pair<int,int>> Q;
 
 class Graph{
 private:
-
     double** graph; //costs matrix
     char** representation; //Eventual graphical representation of the graph
-    std::pair<int,double>* predecessors; //best path predecessor from one node;
-    std::pair<std::pair<int,int>,double>* path; //best predecessor point
+    std::map<int,std::pair<int,double>> predecessors; //Map for node -> (previous node, cost) in normal graph representation
+    std::map<int,std::pair<std::pair<int,int>,double>> path; //Map for point -> (previous point, cost) in space graph representation
     int nnodes,reprRows, reprCols;
-
 public:
 
     //Constructor (for costs)
     Graph(int n, double**g):nnodes(n){
         graph = new double*[nnodes];
-        predecessors = new std::pair<int,double>[nnodes];
-
         for(int i = 0; i != nnodes; ++i){
             graph[i] = new double[nnodes];
-            predecessors[i] = std::make_pair(-1, 3000000);    
-        }
-        for(int i = 0; i != nnodes; ++i){
             for(int j = 0; j != nnodes; ++j){
                 graph[i][j] = g[i][j];
             }
@@ -46,7 +40,6 @@ public:
             char input;
             strm >> reprRows;
             strm >> reprCols;
-            path = new std::pair<std::pair<int,int>,double>[reprCols*reprRows];
             representation = new char*[reprCols];
             for(int i = 0; i != reprCols; ++i){
                 representation[i] = new char[reprRows];
@@ -55,7 +48,6 @@ public:
             for(int i = 0; i != reprRows; ++i){
                 for(int j = 0; j != reprCols; ++j){
                     strm >> representation[i][j];
-                    path[i+j] = std::make_pair(std::make_pair(-1,-1),60000);
                 }
             }
             
@@ -68,17 +60,16 @@ public:
             delete [] graph[i];
         }
         delete [] graph;
-        delete [] predecessors;
     }
 
     Graph(const Graph& g):nnodes(g.nnodes){
         graph = new double*[nnodes];
-        predecessors = new std::pair<int,double>[nnodes];
+        predecessors = g.predecessors;
 
         for(int i = 0; i != nnodes; ++i){
-            graph[i] = new double[nnodes];
-            predecessors[i] = g.predecessors[i];    
+            graph[i] = new double[nnodes];    
         }
+
         for(int i = 0; i != nnodes; ++i){
             for(int j = 0; j != nnodes; ++j){
                 graph[i][j] = g.graph[i][j];
@@ -86,36 +77,51 @@ public:
         }
     }
 
-    int arr(int i, int j){ return j + i*reprCols -1;}
+    //Function used to represent the place in the graph in a unique number
+    int arr(int i, int j){ return j + i*reprCols;}
 
+    //Inverse of the arr function
     std::pair<int,int> state(int s){
-        int j = (s % reprCols) + 1;
-        int i = (s + 1 - j)/reprCols;
+        int j = (s % reprCols);
+        int i = (s - j)/reprCols;
         return std::make_pair(i,j);
     }
 
+    //Function used to print the path traversed by the agent in a simple graph(Problem here)
     void printPath(int node, int init){
-        if(node == init){
-            std::cout << node << std::endl;
+        if(predecessors.at(node).first == init){
+            std::cout << init << "-> " << node << " -> ";
         }else{
-            std::cout << predecessors[node].first << " -> ";
-            printPath(predecessors[node].first,init);
+            try{
+                auto prev = predecessors.at(node).first; 
+                printPath(prev, init);
+                std::cout << node << " -> ";
+            }catch(std::out_of_range e){
+                std::cout << node <<" index not found in map!" << std::endl;
+            }
         }
     }
 
+    //Function used when we have a plane with states to be traversed (Overloaded)
      void printPath(const std::pair<int,int>& node, const std::pair<int,int>& init){
         if(node.first == init.first && node.second == init.second){
             representation[node.first][node.second] = 'S';
         }else{
-            std::cout << node.first << " " << node.second << std::endl;
-            int i = path[arr(node.first,node.second)].first.first;
-            int j = path[arr(node.first,node.second)].first.second;
-            representation[node.first][node.second] = 'P';
-            std::cout << i << " " <<  j  << std::endl;
-            printPath(path[arr(node.first,node.second)].first,init);
+            try{
+                int n = arr(node.first,node.second);
+                //std::cout << node.first << " " << node.second <<" "<< n <<std::endl;
+                int i = path.at(n).first.first;
+                int j = path.at(n).first.second;
+                representation[node.first][node.second] = 'P';
+                //std::cout << i << " " <<  j  << std::endl;
+                printPath(path.at(n).first,init);
+            }catch(std::out_of_range e){
+                std::cout << "index (" << node.first << "," << node.second <<  ") not found in map!"<< std::endl;
+            }
         }
     }
 
+    //Function to print the graph in a graphical way
     void printRepresentation(){
         for(int i = 0; i!= reprRows; ++i){
             for(int j = 0; j != reprCols; ++j){
@@ -125,41 +131,50 @@ public:
         }
     }
 
+    //Function that computes the cost of doing a path from one point to another
     double computeCost(const std::pair<int,int>& p1,const std::pair<int,int>& p2){
         return abs(p1.first - p2.first) + abs(p1.second - p2.second);
     }
 
+
+    //Function for the UCS in a simple graph with nodes
     void uniform_cost_search(int init, int goal){
         //Implementation of the UCS algorithm in order to find the best possible paths for all 
         //nodes in a graph.
         //First step: Put in a priority queue the initial node, with cost 0.
-        std::priority_queue<P,std::vector<P>, std::greater<P>> frontier;
+        std::priority_queue<P,std::vector<P>, std::greater<P>> frontier;  // priority queue of (cost,node)
         frontier.push(std::make_pair(0,init));
         predecessors[init] = std::make_pair(init,0); 
         //Now do expansion and iteration of the process of search
-         std::cout << "Next to expand: ( " << frontier.top().second << " , " << frontier.top().first << ")" << std::endl;
+        std::cout << "Next to expand: " << frontier.top().second  << std::endl;
         while(!frontier.empty()){
             double actual_cost = frontier.top().first;
             int actual_expansion = frontier.top().second;
             frontier.pop();
-                if(actual_expansion != goal){
-                    for(int i = 0; i != nnodes; ++i){
-                        if(graph[actual_expansion][i] > 0){
-                            frontier.push(std::make_pair((actual_cost+graph[actual_expansion][i]),i)); //put the successor in the graph
-                            if(predecessors[i].second > (actual_cost+graph[actual_expansion][i])){
-                                predecessors[i] = std::make_pair(actual_expansion,(actual_cost+graph[actual_expansion][i]));
+            if(actual_expansion != goal){
+                for(int i = 0; i != nnodes; ++i){
+                    if(graph[actual_expansion][i] > 0){
+                        frontier.push(std::make_pair((actual_cost+graph[actual_expansion][i]),i)); //put the successor in the graph
+                        try{
+                            if(predecessors.at(i).second > (actual_cost+graph[actual_expansion][i])){
+                                predecessors[i] = std::make_pair(actual_expansion,(actual_cost + graph[actual_expansion][i]));
                             }
+                        }catch(std::out_of_range e){
+                            predecessors[i] = std::make_pair(actual_expansion,(actual_cost + graph[actual_expansion][i]));
+                            continue;
                         }
                     }
-                std::cout << "Next to expand: ( " << frontier.top().second << " , " << frontier.top().first << ")" << std::endl;
-                }else{
-                    std::cout << "Goal found with cost " << actual_cost << std::endl;
-                    printPath(actual_expansion,init);
-                    return;
                 }
+            std::cout << "Next to expand: " << frontier.top().second  << std::endl;    
+            }else{
+                std::cout << "Goal found with cost " << actual_cost << std::endl;
+                printPath(actual_expansion,init);
+                return;
+            }
         }
     }
 
+    //Function defined for an operational space
     void uniform_cost_search(const std::pair<int,int>& init, const std::pair<int,int>& goal){
         std::set<Q> frontier;  //create a set of nodes 
         frontier.insert(std::make_pair(0,init));
@@ -168,44 +183,44 @@ public:
     
         while(!frontier.empty()){
             std::pair<int,int> actual_expansion = frontier.begin()->second;
-            double heuristic = computeCost(actual_expansion,goal);
-            double actual_cost = frontier.begin()->first /*- heuristic*/;
-            //std::cout << "Next to expand: ( " << frontier.begin()->second.first << " , " << frontier.begin()->second.second << ") with cost " << frontier.begin()->first << std::endl;
+            double actual_cost = frontier.begin()->first;
             frontier.erase(frontier.begin());
-                if(actual_expansion.first != goal.first || actual_expansion.second != goal.second){
-                    for(int i = 1; i >= -1; --i){
-                        for(int j = 1; j >= -1; --j){
-                            if(!(j == 0 && i == 0)){
-                                std::pair<int,int> actual_near = std::make_pair(actual_expansion.first + i,actual_expansion.second + j);
-                                if((actual_near.first >= 0 && actual_near.first < reprRows) && (actual_near.second >= 0 && actual_near.second < reprCols)){
-                                    //std::cout << "insert: (" << actual_near.first << " , " << actual_near.second << " )" << std::endl;
+            if(actual_expansion.first != goal.first || actual_expansion.second != goal.second){
+                for(int i = 1; i >= -1; --i){
+                    for(int j = 1; j >= -1; --j){
+                        if(!(j == 0 && i == 0)){
+                            std::pair<int,int> actual_near = std::make_pair(actual_expansion.first + i,actual_expansion.second + j);
+                            if((actual_near.first >= 0 && actual_near.first < reprRows) && (actual_near.second >= 0 && actual_near.second < reprCols)){                                    //std::cout << "insert: (" << actual_near.first << " , " << actual_near.second << " )" << std::endl;
                                     double cost = computeCost(actual_expansion,actual_near) /* + computeCost(actual_near,goal)*/;
-                                    if(representation[actual_near.first][actual_near.second] == '#'){ cost = 60000; }
-                                    frontier.insert(std::make_pair((actual_cost + cost ),actual_near)); //put the successor in the graph
-                                    if( path[arr(i,j)].second > (actual_cost + cost)){
-                                        path[arr(i,j)].second = actual_cost + cost;
-                                        path[arr(i,j)].first = actual_expansion; //I set as the father of (i,j), the actual expansion
+                                if(representation[actual_near.first][actual_near.second] == '#'){ cost = 60000; }
+                                frontier.insert(std::make_pair((actual_cost + cost ),actual_near)); //put the successor in the graph
+                                try{
+                                    if( path.at(arr(actual_expansion.first+i,actual_expansion.second+j)).second > (actual_cost + cost)){
+                                        path[arr(actual_expansion.first+i,actual_expansion.second+j)] = std::make_pair(actual_expansion,(actual_cost + cost)); //I set as the father of (i,j), the actual expansion
                                     }
+                                }catch(std::out_of_range e){
+                                    path[arr(actual_expansion.first+i,actual_expansion.second+j)] = std::make_pair(actual_expansion,(actual_cost + cost)); 
                                 }
                             }
                         }
                     }
-                }else{
-                    std::cout << "Goal found with cost " << actual_cost << " in [" << actual_expansion.first<< ","<< actual_expansion.second <<"] " << std::endl;
-                    printPath(goal,init);
-                    printRepresentation();
-                    return;
                 }
+            }else{
+                std::cout << "Goal found with cost " << actual_cost << " in [" << actual_expansion.first<< ","<< actual_expansion.second <<"] " << std::endl;
+                
+                printPath(goal,init);
+                printRepresentation();
+                return;
+            }
         }
     }
-    
-
 };
 
 
 int main(){
     double** g;
-    int nnodes = 7;
+    int nnodes = 5;
+    
     g = new double*[nnodes];
     for(int i = 0; i != nnodes; ++i){
         g[i] = new double[nnodes];
@@ -216,16 +231,26 @@ int main(){
         }
     }
 
+    //For this graph the path is 0 3 2 4       
+    g[0][1] = 1;
+    g[0][2] = 6;
+    g[0][3] = 2;
+    g[0][4] = 6;
+    g[1][4] = 6;
+    g[2][3] = 1;
+    g[3][2] = 2;
+    g[2][4] = 1;
+
     //Graph *gr = new Graph(nnodes,g);
+    
     Graph *gr = new Graph("op_space.txt");
-    gr->printRepresentation();
-    std::pair<int,int> init = std::make_pair(6,3);
-    std::pair<int,int> goal = std::make_pair(6,25);
-    gr->uniform_cost_search(init,goal);
-    std::cout << gr->computeCost(init,goal) << " " << gr->computeCost(init,std::make_pair(5,4));
+    
+    gr->uniform_cost_search(std::make_pair(5,3),std::make_pair(5,25));
+    
     for(int i = 0; i != nnodes; i++){
         delete [] g[i];
     }
+    
     delete [] g;
     delete gr;
     return 0;
