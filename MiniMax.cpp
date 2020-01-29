@@ -325,5 +325,6 @@ public:
 int main(){
     Game* g = new Game(false);
     g->start();
+    delete g;
     return 0;
 }
